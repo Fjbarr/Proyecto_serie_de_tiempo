@@ -1,0 +1,129 @@
+Traceback (most recent call last):
+  File "/home/administrador/.local/lib/python3.10/site-packages/jupyter_cache/executors/utils.py", line 58, in single_nb_execution
+    executenb(
+  File "/home/administrador/.local/lib/python3.10/site-packages/nbclient/client.py", line 1314, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+  File "/home/administrador/.local/lib/python3.10/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/home/administrador/.local/lib/python3.10/site-packages/nbclient/client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "/home/administrador/.local/lib/python3.10/site-packages/nbclient/client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "/home/administrador/.local/lib/python3.10/site-packages/nbclient/client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+import numpy as np
+import tensorflow as tf
+from sklearn.metrics import mean_squared_error
+
+# Función para crear ventanas de datos multivariadas
+def create_multivariate_windows(data, window_size, target_index):
+    X, y = [], []
+    for i in range(len(data) - window_size):
+        X.append(data[i:i + window_size])
+        y.append(data[i + window_size, target_index])
+    return np.array(X), np.array(y)
+
+# Definir modelo CNN-LSTM con atención en una estructura funcional
+def build_cnn_lstm_attention_model(input_shape):
+    # Entrada del modelo
+    inputs = tf.keras.Input(shape=input_shape)
+    
+    # Capas convolucionales para extracción de características locales
+    conv_out = tf.keras.layers.Conv1D(filters=64, kernel_size=2, activation='relu')(inputs)
+    conv_out = tf.keras.layers.MaxPooling1D(pool_size=2)(conv_out)
+    
+    # LSTM para capturar dependencias de largo plazo
+    lstm_out = tf.keras.layers.LSTM(50, return_sequences=True)(conv_out)
+    
+    # Aplicación de la capa de atención
+    attention_out = tf.keras.layers.Attention()([lstm_out, lstm_out])
+    
+    # Aplanamiento y salida del modelo
+    flat_out = tf.keras.layers.Flatten()(attention_out)
+    outputs = tf.keras.layers.Dense(1)(flat_out)
+    
+    # Definir el modelo final
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
+# Rango de tamaños de ventana a probar
+window_sizes = range(5, 20, 5)
+best_rmse_usd = float("inf")
+best_window_size_usd = None
+best_rmse_eur = float("inf")
+best_window_size_eur = None
+
+# Búsqueda del tamaño de ventana óptimo para USD
+for window_size in window_sizes:
+    # Crear ventanas de datos para USD
+    train_data_values_usd = train_data[['USD', 'EUR']].values
+    test_data_values_usd = test_data[['USD', 'EUR']].values
+    X_train_usd, y_train_usd = create_multivariate_windows(train_data_values_usd, window_size, target_index=0)
+    X_val_usd, y_val_usd = create_multivariate_windows(test_data_values_usd, window_size, target_index=0)
+    
+    # Construir y entrenar el modelo CNN-LSTM para USD
+    model_usd = build_cnn_lstm_attention_model((X_train_usd.shape[1], X_train_usd.shape[2]))
+    model_usd.fit(X_train_usd, y_train_usd, epochs=100, batch_size=32, verbose=0)  # Cambiado a epochs=100
+    
+    # Predicciones y cálculo del RMSE para USD
+    y_pred_usd = model_usd.predict(X_val_usd).reshape(-1)
+    rmse_usd = np.sqrt(mean_squared_error(y_val_usd, y_pred_usd))
+    
+    # Verificar si este tamaño de ventana es el mejor para USD
+    if rmse_usd < best_rmse_usd:
+        best_rmse_usd = rmse_usd
+        best_window_size_usd = window_size
+
+# Búsqueda del tamaño de ventana óptimo para EUR
+for window_size in window_sizes:
+    # Crear ventanas de datos para EUR
+    train_data_values_eur = train_data[['USD', 'EUR']].values
+    test_data_values_eur = test_data[['USD', 'EUR']].values
+    X_train_eur, y_train_eur = create_multivariate_windows(train_data_values_eur, window_size, target_index=1)
+    X_val_eur, y_val_eur = create_multivariate_windows(test_data_values_eur, window_size, target_index=1)
+    
+    # Construir y entrenar el modelo CNN-LSTM para EUR
+    model_eur = build_cnn_lstm_attention_model((X_train_eur.shape[1], X_train_eur.shape[2]))
+    model_eur.fit(X_train_eur, y_train_eur, epochs=50, batch_size=32, verbose=0) 
+    
+    # Predicciones y cálculo del RMSE para EUR
+    y_pred_eur = model_eur.predict(X_val_eur).reshape(-1)
+    rmse_eur = np.sqrt(mean_squared_error(y_val_eur, y_pred_eur))
+    
+    # Verificar si este tamaño de ventana es el mejor para EUR
+    if rmse_eur < best_rmse_eur:
+        best_rmse_eur = rmse_eur
+        best_window_size_eur = window_size
+
+# Imprimir resultados
+print(f"Mejor tamaño de ventana para USD: {best_window_size_usd} con RMSE: {best_rmse_usd}")
+print(f"Mejor tamaño de ventana para EUR: {best_window_size_eur} con RMSE: {best_rmse_eur}")
+
+------------------
+
+----- stderr -----
+2024-10-26 16:48:49.122541: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1729979329.137745 1051695 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1729979329.142509 1051695 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2024-10-26 16:48:49.158881: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+------------------
+
+[0;31m---------------------------------------------------------------------------[0m
+[0;31mNameError[0m                                 Traceback (most recent call last)
+Cell [0;32mIn[2], line 47[0m
+[1;32m     44[0m [38;5;66;03m# Búsqueda del tamaño de ventana óptimo para USD[39;00m
+[1;32m     45[0m [38;5;28;01mfor[39;00m window_size [38;5;129;01min[39;00m window_sizes:
+[1;32m     46[0m     [38;5;66;03m# Crear ventanas de datos para USD[39;00m
+[0;32m---> 47[0m     train_data_values_usd [38;5;241m=[39m [43mtrain_data[49m[[[38;5;124m'[39m[38;5;124mUSD[39m[38;5;124m'[39m, [38;5;124m'[39m[38;5;124mEUR[39m[38;5;124m'[39m]][38;5;241m.[39mvalues
+[1;32m     48[0m     test_data_values_usd [38;5;241m=[39m test_data[[[38;5;124m'[39m[38;5;124mUSD[39m[38;5;124m'[39m, [38;5;124m'[39m[38;5;124mEUR[39m[38;5;124m'[39m]][38;5;241m.[39mvalues
+[1;32m     49[0m     X_train_usd, y_train_usd [38;5;241m=[39m create_multivariate_windows(train_data_values_usd, window_size, target_index[38;5;241m=[39m[38;5;241m0[39m)
+
+[0;31mNameError[0m: name 'train_data' is not defined
+
